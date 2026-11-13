@@ -10,7 +10,7 @@
   "servers": {
     "serveur-ia": {
       "type": "http",
-      "url": "https://REMPLACE-PAR-TON-SERVICE.onrender.com/mcp",
+      "url": "https://benjamin-mcp-taches-2026.onrender.com/mcp",
       "headers": {
         "Authorization": "Bearer ${input:mcp-session-token}"
       }
