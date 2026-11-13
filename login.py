@@ -20,6 +20,14 @@ import urllib.request
 from pathlib import Path
 
 
+def demander(question: str) -> str:
+    """Pose une question sur le terminal (stderr), pour que `$(python login.py)`
+    ne récupère que le jeton de session sur la sortie standard."""
+    sys.stderr.write(question)
+    sys.stderr.flush()
+    return sys.stdin.readline().strip()
+
+
 def charger_env() -> None:
     """Lit un fichier .env simple (CLE=valeur) sans écraser l'environnement."""
     fichier = Path(__file__).parent / ".env"
@@ -36,7 +44,7 @@ def url_serveur() -> str:
     charger_env()
     url = os.environ.get("MCP_URL", "").rstrip("/")
     if not url:
-        url = input("URL du serveur (ex. https://mon-service.onrender.com) : ").strip().rstrip("/")
+        url = demander("URL du serveur (ex. https://mon-service.onrender.com) : ").rstrip("/")
     if url.endswith("/mcp"):
         url = url[: -len("/mcp")]
     return url
@@ -45,7 +53,7 @@ def url_serveur() -> str:
 def obtenir_session(url: str, code: str | None = None) -> str:
     charger_env()
     jeton = os.environ.get("MCP_API_TOKEN") or getpass.getpass("Jeton secret (MCP_API_TOKEN) : ")
-    code = code or input("Code à 6 chiffres de l'application d'authentification : ").strip()
+    code = code or demander("Code à 6 chiffres de l'application d'authentification : ")
 
     requete = urllib.request.Request(
         f"{url}/auth/login",
