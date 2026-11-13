@@ -226,6 +226,46 @@ def chercher(texte: str, chemin: str = "") -> dict:
     return {"resultats": resultats, "tronque": tronque}
 
 
+DOSSIER_GUIDES = Path(__file__).parent / "guides"
+
+
+def _guides_disponibles() -> dict[str, Path]:
+    """Nom (sans .md) -> fichier. Seuls ces noms sont accessibles : aucun chemin libre."""
+    if not DOSSIER_GUIDES.is_dir():
+        return {}
+    return {p.stem: p for p in sorted(DOSSIER_GUIDES.glob("*.md")) if p.is_file()}
+
+
+def lire_guide(nom: str = "") -> dict:
+    guides = _guides_disponibles()
+    if not guides:
+        raise WorkspaceError("Aucun guide disponible.")
+    demande = (nom or "").strip().lower().removesuffix(".md")
+    if not demande:
+        return {"guides": list(guides), "conseil": "Commence par '00-demarrage'."}
+    trouves = [n for n in guides if n.lower() == demande] or [
+        n for n in guides if n.lower().startswith(demande) or demande in n.lower()
+    ]
+    if len(trouves) != 1:
+        raise WorkspaceError(f"Guide inconnu ou ambigu. Guides : {', '.join(guides)}")
+    return {
+        "guide": trouves[0],
+        "contenu": guides[trouves[0]].read_text(encoding="utf-8"),
+    }
+
+
+def publier_guides() -> int:
+    """Copie les guides dans <espace>/_guides/ pour qu'on les voie dans VS Code."""
+    cible = racine() / "_guides"
+    guides = _guides_disponibles()
+    if not guides:
+        return 0
+    cible.mkdir(parents=True, exist_ok=True)
+    for nom, source in guides.items():
+        _ecrire_atomique(cible / f"{nom}.md", source.read_bytes())
+    return len(guides)
+
+
 def archive_zip() -> bytes:
     """Archive de tout l'espace de travail (pour la synchronisation vers VS Code)."""
     tampon = io.BytesIO()

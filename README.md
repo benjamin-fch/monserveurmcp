@@ -66,6 +66,7 @@ claude mcp add --transport http serveur-ia https://TON-SERVICE.onrender.com/mcp 
 
 ## 4. Outils exposés
 
+Guides : `lire_guide` (à appeler en premier par l'IA, voir ci-dessous).
 Tâches : `creer_tache`, `lister_taches`, `consulter_tache`, `prendre_tache`, `deposer_resultat`.
 Fichiers : `lister_fichiers`, `lire_fichier`, `ecrire_fichier`, `ajouter_au_fichier`,
 `creer_dossier`, `deplacer_fichier`, `supprimer_fichier`, `chercher_dans_fichiers`.
@@ -75,6 +76,17 @@ symboliques sortants sont refusés. Limites : 2 Mo par écriture, 5 Mo par lectu
 200 Mo au total (`WORKSPACE_MAX_BYTES`).
 
 Les tâches restent en mémoire : elles sont perdues au redémarrage.
+
+## 5. Guides pour les IA
+
+Le dossier `guides/` explique à France Student IA comment travailler avec le serveur :
+`00-demarrage` (rôles et règles), `01-outils` (mode d'emploi), `02-projet-echo-express`
+(circuit avec Claude) et `03-conventions` (nommage, journal).
+- Les instructions du serveur demandent à l'IA d'appeler `lire_guide("00-demarrage")` d'abord.
+- Au démarrage, les guides sont aussi copiés dans `_guides/` de l'espace de travail :
+  tu les vois dans VS Code après `python pull_workspace.py`.
+- Pour les modifier : édite `guides/*.md` dans le dépôt et redéploie.
+- Dans une conversation normale (sans connexion MCP), colle-lui simplement le contenu de `00-demarrage.md`.
 
 ## Limites connues
 

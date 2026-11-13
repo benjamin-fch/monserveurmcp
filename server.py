@@ -20,7 +20,9 @@ mcp = MCPServer(
         "de créer, consulter, prendre et terminer des tâches, et de "
         "travailler sur des fichiers dans un espace de travail partagé "
         "(lister_fichiers, lire_fichier, ecrire_fichier...). Les chemins "
-        "sont toujours relatifs à la racine de l'espace de travail."
+        "sont toujours relatifs à la racine de l'espace de travail. "
+        "PREMIÈRE ACTION OBLIGATOIRE : appelle lire_guide avec le nom "
+        "'00-demarrage' et suis ses consignes avant toute autre action."
     ),
 )
 
@@ -183,6 +185,22 @@ def deposer_resultat(
         }
 
 
+# --- Guides d'utilisation pour les IA -----------------------------------
+
+
+@mcp.tool()
+def lire_guide(nom: str = "") -> dict:
+    """
+    Lit un guide d'utilisation du serveur. À APPELER EN PREMIER avec
+    nom="00-demarrage". Sans nom, liste les guides disponibles.
+
+    Args:
+        nom: Nom du guide, par ex. "00-demarrage", "01-outils",
+            "02-projet-echo-express", "03-conventions".
+    """
+    return _garde(workspace.lire_guide, nom)
+
+
 # --- Espace de travail partagé : outils fichiers ------------------------
 
 
@@ -338,6 +356,7 @@ def creer_app():
     global auth
     auth = Authentificateur()  # refuse de démarrer si les secrets manquent
     workspace.racine()
+    workspace.publier_guides()
 
     security = TransportSecuritySettings(
         enable_dns_rebinding_protection=False,
