@@ -1,0 +1,19 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "mcp-session-token",
+      "description": "Jeton de session (lance `python login.py` pour l'obtenir, valable 12 h)",
+      "password": true
+    }
+  ],
+  "servers": {
+    "serveur-ia": {
+      "type": "http",
+      "url": "https://REMPLACE-PAR-TON-SERVICE.onrender.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${input:mcp-session-token}"
+      }
+    }
+  }
+}
