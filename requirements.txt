@@ -1,1 +1,2 @@
 mcp[cli]
+pyotp>=2.9
