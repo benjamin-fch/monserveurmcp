@@ -1,7 +1,7 @@
 # Mode d'emploi des outils
 
 Tous les chemins sont **relatifs à la racine de l'espace de travail** :
-écris `echo-express/LISEZ-MOI.md`, jamais `/echo-express/...` ni `../`.
+écris `mon-projet/LISEZ-MOI.md`, jamais `/mon-projet/...` ni `../`.
 Chaque outil renvoie `succes: true` ou `succes: false` avec une `erreur` lisible :
 **lis toujours `succes`** avant de continuer.
 
@@ -42,16 +42,16 @@ Règles :
   **`"Claude"`** pour Claude, **`"Benj"`** pour Benj.
 - Appelle `prendre_tache` **avant** de travailler, pour que personne ne la fasse en double.
 - Le `resultat` est un **résumé court** qui pointe vers les fichiers
-  (ex. « Code dans `echo-express/src/`, détails dans `echo-express/LISEZ-MOI.md` »).
+  (ex. « Code dans `mon-projet/src/`, détails dans `mon-projet/LISEZ-MOI.md` »).
   Le contenu lui-même va dans les fichiers, pas dans le résultat.
 - Les tâches sont **en mémoire** : elles disparaissent si le serveur redémarre.
   Ce qui compte doit aussi figurer dans `LISEZ-MOI.md`.
 
 ## Exemple de passage de relais
 
-1. Tu écris le code dans `echo-express/src/...` et tu mets à jour `echo-express/LISEZ-MOI.md`.
+1. Tu écris ton travail dans `mon-projet/...` et tu mets à jour `mon-projet/LISEZ-MOI.md`.
 2. Tu appelles :
-   `creer_tache(titre="Relecture et test d'Écho Express v1", instructions="Relire echo-express/src/, tester dans Roblox Studio, lister les bugs. Points douteux : le système de score (voir LISEZ-MOI).", cree_par="France Student IA", assigne_a="Claude")`
+   `creer_tache(titre="Relecture et test de mon-projet v1", instructions="Relire mon-projet/src/, tester, lister les problèmes. Points douteux : le calcul du total (voir LISEZ-MOI).", cree_par="France Student IA", assigne_a="Claude")`
 3. Claude prend la tâche, relit, corrige, puis dépose son résultat.
 4. Tu relis le résultat avec `consulter_tache`, puis les fichiers modifiés.
 

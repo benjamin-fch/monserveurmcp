@@ -80,12 +80,15 @@ Les tâches restent en mémoire : elles sont perdues au redémarrage.
 ## 5. Guides pour les IA
 
 Le dossier `guides/` explique à France Student IA comment travailler avec le serveur :
-`00-demarrage` (rôles et règles), `01-outils` (mode d'emploi), `02-projet-echo-express`
-(circuit avec Claude) et `03-conventions` (nommage, journal).
+`00-demarrage` (rôles et règles), `01-outils` (mode d'emploi), `02-projets` (mener
+n'importe quel projet et passer le relais à Claude), `03-conventions` (nommage, journal)
+et un guide **par projet** nommé `projet-<nom>.md` (aujourd'hui : `projet-echo-express`,
+le jeu Roblox). Roblox n'est qu'un projet parmi d'autres.
 - Les instructions du serveur demandent à l'IA d'appeler `lire_guide("00-demarrage")` d'abord.
 - Au démarrage, les guides sont aussi copiés dans `_guides/` de l'espace de travail :
   tu les vois dans VS Code après `python pull_workspace.py`.
-- Pour les modifier : édite `guides/*.md` dans le dépôt et redéploie.
+- Pour modifier un guide ou en ajouter un (nouveau projet) : édite/crée `guides/*.md`
+  dans le dépôt et redéploie. Il apparaît tout seul dans `lire_guide()`.
 - Dans une conversation normale (sans connexion MCP), colle-lui simplement le contenu de `00-demarrage.md`.
 
 ## Limites connues

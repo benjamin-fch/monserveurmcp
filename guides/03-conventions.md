@@ -3,8 +3,8 @@
 ## Noms
 
 - Dossiers et fichiers en **minuscules, sans espaces ni accents**, avec des tirets :
-  `echo-express`, `plan-niveau-1.md`. (Exception : les noms de scripts Roblox
-  peuvent suivre le style Roblox, par ex. `GameManager.server.lua`.)
+  `echo-express`, `plan-niveau-1.md`. (Exception : quand un guide de projet
+  impose une convention (ex. noms de scripts Roblox), suis le guide du projet.)
 - Documents : `.md` (Markdown). Code : l'extension du langage (`.lua`, `.py`, `.js`, `.html`).
 - Pas de copies du genre `fichier-final-v2-vraiment-final.md`. Garde **une** version
   à jour et note l'historique dans `JOURNAL.md`.
@@ -13,7 +13,7 @@
 
 | Contenu | Où |
 |---|---|
-| Un projet | Son propre dossier à la racine |
+| Un projet | Son propre dossier à la racine, listé dans `PROJETS.md` |
 | Code | `<projet>/src/` |
 | Notes, idées, recherches | `<projet>/notes/` |
 | Résumé et état du projet | `<projet>/LISEZ-MOI.md` |

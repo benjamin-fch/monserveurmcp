@@ -196,7 +196,8 @@ def lire_guide(nom: str = "") -> dict:
 
     Args:
         nom: Nom du guide, par ex. "00-demarrage", "01-outils",
-            "02-projet-echo-express", "03-conventions".
+            "02-projets", "03-conventions" ou "projet-<nom>" pour le guide
+            d'un projet précis. Sans nom, la liste à jour est renvoyée.
     """
     return _garde(workspace.lire_guide, nom)
 

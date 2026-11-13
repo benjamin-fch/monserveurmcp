@@ -1,5 +1,8 @@
 # Projet « Écho Express » (jeu Roblox)
 
+> Guide **propre à ce projet**. Les règles générales sont dans `00-demarrage` et
+> `02-projets` ; ce guide ne les remplace pas, il ajoute ce qui est spécifique à Roblox.
+
 ## Le circuit de travail
 
 Benj veut que vous construisiez ensemble un jeu Roblox, en deux temps :
