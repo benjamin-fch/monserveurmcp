@@ -1,3 +1,4 @@
+import json
 import os
 import threading
 import uuid
@@ -11,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 import workspace
+from depot_git import depot
 from auth import Authentificateur
 from oauth import FournisseurOAuth
 from passkey import Passkeys
@@ -52,6 +54,26 @@ mcp = MCPServer(
 
 tasks: dict[str, dict] = {}
 tasks_lock = threading.Lock()
+FICHIER_TACHES = "_taches/taches.json"
+
+
+def charger_taches() -> None:
+    """Recharge les tâches sauvegardées dans l'espace de travail (donc sur GitHub)."""
+    chemin = workspace.racine() / FICHIER_TACHES
+    if chemin.is_file():
+        try:
+            with tasks_lock:
+                tasks.update({t["id"]: t for t in json.loads(chemin.read_text(encoding="utf-8"))})
+        except (ValueError, KeyError, TypeError):
+            pass
+
+
+def sauver_taches(message: str) -> None:
+    """À appeler avec tasks_lock tenu."""
+    contenu = json.dumps(list(tasks.values()), ensure_ascii=False, indent=2) + "\n"
+    with depot.verrou:
+        workspace.ecrire(FICHIER_TACHES, contenu)
+    depot.signaler(message)
 
 
 def maintenant() -> str:
@@ -91,6 +113,7 @@ def creer_tache(
 
     with tasks_lock:
         tasks[task_id] = task
+        sauver_taches(f"Tâche créée : {titre[:60]}")
 
     return task
 
@@ -168,6 +191,7 @@ def prendre_tache(task_id: str, executant: str) -> dict:
         task["statut"] = "en_cours"
         task["assigne_a"] = executant
         task["date_modification"] = maintenant()
+        sauver_taches(f"Tâche prise par {executant[:30]} : {task['titre'][:60]}")
 
         return {
             "succes": True,
@@ -202,6 +226,7 @@ def deposer_resultat(
         task["resultat"] = resultat
         task["assigne_a"] = executant
         task["date_modification"] = maintenant()
+        sauver_taches(f"Tâche terminée par {executant[:30]} : {task['titre'][:60]}")
 
         return {
             "succes": True,
@@ -229,10 +254,15 @@ def lire_guide(nom: str = "") -> dict:
 # --- Espace de travail partagé : outils fichiers ------------------------
 
 
-def _garde(fonction, *args, **kwargs) -> dict:
-    """Exécute une opération fichier et uniformise les erreurs."""
+def _garde(fonction, *args, journal: str | None = None, **kwargs) -> dict:
+    """Exécute une opération fichier, uniformise les erreurs et, pour une
+    écriture réussie (journal renseigné), déclenche la sauvegarde GitHub."""
     try:
-        return {"succes": True, **fonction(*args, **kwargs)}
+        with depot.verrou:
+            resultat = {"succes": True, **fonction(*args, **kwargs)}
+        if journal:
+            depot.signaler(journal)
+        return resultat
     except workspace.WorkspaceError as erreur:
         return {"succes": False, "erreur": str(erreur)}
     except OSError as erreur:
@@ -274,7 +304,7 @@ def ecrire_fichier(chemin: str, contenu: str, ecraser: bool = True) -> dict:
         contenu: Texte complet du fichier.
         ecraser: Si faux, refuse d'écraser un fichier existant.
     """
-    return _garde(workspace.ecrire, chemin, contenu, ecraser)
+    return _garde(workspace.ecrire, chemin, contenu, ecraser, journal=f"Écrit {chemin}")
 
 
 @mcp.tool()
@@ -286,7 +316,7 @@ def ajouter_au_fichier(chemin: str, contenu: str) -> dict:
         chemin: Chemin relatif du fichier.
         contenu: Texte à ajouter.
     """
-    return _garde(workspace.ajouter, chemin, contenu)
+    return _garde(workspace.ajouter, chemin, contenu, journal=f"Complète {chemin}")
 
 
 @mcp.tool()
@@ -297,7 +327,7 @@ def creer_dossier(chemin: str) -> dict:
     Args:
         chemin: Chemin relatif du dossier.
     """
-    return _garde(workspace.creer_dossier, chemin)
+    return _garde(workspace.creer_dossier, chemin, journal=f"Crée le dossier {chemin}")
 
 
 @mcp.tool()
@@ -309,7 +339,7 @@ def deplacer_fichier(source: str, destination: str) -> dict:
         source: Chemin relatif actuel.
         destination: Nouveau chemin relatif (ne doit pas exister).
     """
-    return _garde(workspace.deplacer, source, destination)
+    return _garde(workspace.deplacer, source, destination, journal=f"Déplace {source} vers {destination}")
 
 
 @mcp.tool()
@@ -320,7 +350,7 @@ def supprimer_fichier(chemin: str) -> dict:
     Args:
         chemin: Chemin relatif à supprimer.
     """
-    return _garde(workspace.supprimer, chemin)
+    return _garde(workspace.supprimer, chemin, journal=f"Supprime {chemin}")
 
 
 @mcp.tool()
@@ -384,8 +414,10 @@ async def archive(request: Request) -> Response:
 
 def creer_app():
     """Construit l'application ASGI (OAuth + passkey, transports HTTP et SSE)."""
-    workspace.racine()
-    workspace.publier_guides()
+    depot.demarrer(workspace.racine())  # clone le dépôt GitHub s'il est configuré
+    charger_taches()
+    if workspace.publier_guides():
+        depot.signaler("Met à jour les guides")
 
     security = TransportSecuritySettings(
         enable_dns_rebinding_protection=False,

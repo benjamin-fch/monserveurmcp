@@ -17,8 +17,7 @@ et à toi de **retrouver ces fichiers dans VS Code**. Tout est protégé par une
    |---|---|
    | `MCP_API_TOKEN` | le jeton affiché |
    | `MCP_TOTP_SECRET` | la clé TOTP affichée |
-   | `WORKSPACE_DIR` | `/data/workspace` (voir ci-dessous) |
-   | `PASSKEYS` | vide au départ (rempli à l'étape 3) |
+      | `PASSKEYS` | vide au départ (rempli à l'étape 3) |
    L'URL publique est lue dans `RENDER_EXTERNAL_URL` (fourni par Render) ;
    `PUBLIC_URL` la remplace si tu utilises un domaine personnalisé.
 3. **Enregistre ta passkey** : ouvre `https://TON-SERVICE.onrender.com/passkey/installer`
@@ -26,10 +25,20 @@ et à toi de **retrouver ces fichiers dans VS Code**. Tout est protégé par une
    La page affiche une valeur : colle-la dans la variable `PASSKEYS` et enregistre
    (Render redéploie). Une passkey iCloud fonctionne aussi sur iPhone (Face ID).
    Pour ajouter un appareil, refais l'étape : la valeur contient alors toutes les passkeys.
-4. **Disque persistant** : sur l'offre gratuite de Render, le disque est effacé à
-   chaque redémarrage. Ajoute un *Disk* monté sur `/data` (offre payante), sinon
-   les fichiers créés par les IA disparaîtront. Les passkeys et les connexions,
-   elles, survivent aux redémarrages.
+4. **Sauvegarde sur GitHub** (gratuit, remplace un disque persistant) : l'offre
+   gratuite de Render efface le disque à chaque redémarrage. Crée un dépôt **privé**
+   vide (ex. `serveur-ia-workspace`), puis un jeton *fine-grained* (GitHub > Settings >
+   Developer settings > Fine-grained tokens) limité à **ce seul dépôt**, permission
+   **Contents : Read and write**. Ajoute sur Render :
+   | Variable | Valeur |
+   |---|---|
+   | `GITHUB_REPO` | `benjamin-fch/serveur-ia-workspace` |
+   | `GITHUB_TOKEN` | le jeton |
+   | `WORKSPACE_DIR` | `/tmp/workspace` (le dépôt y est cloné à chaque démarrage) |
+   Chaque écriture d'une IA devient un commit (regroupé sur ~2 s), les tâches sont
+   sauvegardées dans `_taches/taches.json`, et le serveur récupère chaque minute ce
+   que tu modifies ailleurs (VS Code, github.com). Les logs Render affichent
+   « Espace de travail synchronisé » au démarrage.
 5. Commande de démarrage : `python server.py` (inchangée).
 
 ⚠️ Le serveur **refuse de démarrer** si `MCP_API_TOKEN` ou `MCP_TOTP_SECRET` manque.
@@ -67,9 +76,11 @@ côté de `login.py` (ignoré par Git) avec `MCP_URL` et `MCP_API_TOKEN`, puis :
 | Besoin | Commande |
 |---|---|
 | Obtenir un jeton de session (12 h) | `python login.py` |
-| Télécharger les fichiers des IA | `python pull_workspace.py` puis `code workspace-local` |
+| Fichiers des IA dans VS Code | `git clone` du dépôt GitHub de l'espace de travail, puis `git pull` |
+| (sans GitHub) Télécharger les fichiers | `python pull_workspace.py` puis `code workspace-local` |
 | Tester le serveur | `python test_client.py` |
 | Tester OAuth + passkey en local | `python test_oauth_passkey.py` |
+| Tester la sauvegarde GitHub en local | `python test_depot_git.py` |
 
 ## 4. Outils exposés
 
@@ -82,7 +93,8 @@ Les chemins sont relatifs à `WORKSPACE_DIR` ; `..`, chemins absolus et liens
 symboliques sortants sont refusés. Limites : 2 Mo par écriture, 5 Mo par lecture,
 200 Mo au total (`WORKSPACE_MAX_BYTES`).
 
-Les tâches restent en mémoire : elles sont perdues au redémarrage.
+Les tâches sont sauvegardées dans `_taches/taches.json` (donc sur GitHub si configuré).
+Le dossier `.git` de l'espace de travail est inaccessible aux IA.
 
 ## 5. Guides pour les IA
 

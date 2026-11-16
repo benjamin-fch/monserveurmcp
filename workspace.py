@@ -42,7 +42,18 @@ def chemin_sur(relatif: str) -> Path:
     cible = (base / propre).resolve()
     if cible != base and base not in cible.parents:
         raise WorkspaceError("Chemin refusé : il sort de l'espace de travail.")
+    if cible != base and ".git" in cible.relative_to(base).parts:
+        raise WorkspaceError("Chemin refusé : le dossier .git est réservé.")
     return cible
+
+
+def _interne(chemin: Path) -> bool:
+    """Fichiers internes (historique git, fichiers temporaires) : jamais exposés."""
+    try:
+        parties = chemin.relative_to(racine()).parts
+    except ValueError:
+        return True
+    return ".git" in parties or chemin.name.startswith(".tmp-") or chemin.name == ".gitkeep"
 
 
 def _relatif(chemin: Path) -> str:
@@ -52,7 +63,8 @@ def _relatif(chemin: Path) -> str:
 
 def _taille_totale() -> int:
     total = 0
-    for dossier, _, fichiers in os.walk(racine()):
+    for dossier, sous_dossiers, fichiers in os.walk(racine()):
+        sous_dossiers[:] = [d for d in sous_dossiers if d != ".git"]
         for nom in fichiers:
             p = Path(dossier) / nom
             if not p.is_symlink():
@@ -78,7 +90,7 @@ def lister(chemin: str = "", recursif: bool = False) -> dict:
     entrees = []
     tronque = False
     for p in sorted(iterateur):
-        if p.is_symlink():
+        if p.is_symlink() or _interne(p):
             continue
         if len(entrees) >= MAX_ENTREES_LISTE:
             tronque = True
@@ -166,6 +178,10 @@ def creer_dossier(chemin: str) -> dict:
     if cible.exists() and not cible.is_dir():
         raise WorkspaceError("Un fichier existe déjà à cet emplacement.")
     cible.mkdir(parents=True, exist_ok=True)
+    # git ne conserve pas les dossiers vides : un marqueur invisible les garde.
+    marqueur = cible / ".gitkeep"
+    if cible != racine() and not any(p for p in cible.iterdir() if p.name != ".gitkeep"):
+        marqueur.touch()
     return {"chemin": _relatif(cible)}
 
 
@@ -176,6 +192,9 @@ def supprimer(chemin: str) -> dict:
     if not cible.exists():
         raise WorkspaceError("Chemin introuvable.")
     if cible.is_dir():
+        marqueur = cible / ".gitkeep"
+        if marqueur.is_file() and [p.name for p in cible.iterdir()] == [".gitkeep"]:
+            marqueur.unlink()
         try:
             cible.rmdir()
         except OSError:
@@ -210,7 +229,7 @@ def chercher(texte: str, chemin: str = "") -> dict:
     resultats = []
     tronque = False
     for p in fichiers:
-        if p.is_symlink() or not p.is_file() or p.stat().st_size > MAX_LECTURE_OCTETS:
+        if p.is_symlink() or _interne(p) or not p.is_file() or p.stat().st_size > MAX_LECTURE_OCTETS:
             continue
         octets = p.read_bytes()
         if _est_binaire(octets):
@@ -271,7 +290,8 @@ def archive_zip() -> bytes:
     tampon = io.BytesIO()
     total = 0
     with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as z:
-        for dossier, _, fichiers in os.walk(racine()):
+        for dossier, sous_dossiers, fichiers in os.walk(racine()):
+            sous_dossiers[:] = [d for d in sous_dossiers if d != ".git"]
             for nom in sorted(fichiers):
                 p = Path(dossier) / nom
                 if p.is_symlink() or nom.startswith(".tmp-"):
