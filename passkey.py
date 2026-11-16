@@ -35,7 +35,19 @@ from webauthn.helpers.structs import (
     UserVerificationRequirement,
 )
 
-from oauth import FournisseurOAuth, UsageUnique
+from oauth import FournisseurOAuth, UsageUnique, hote_redirection
+
+# Pages sensibles : jamais affichées dans un cadre (anti-clickjacking).
+ENTETES_HTML = {
+    "Content-Security-Policy": "frame-ancestors 'none'",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+
+
+def reponse_html(contenu: str, status_code: int = 200) -> HTMLResponse:
+    return HTMLResponse(contenu, status_code=status_code, headers=ENTETES_HTML)
 
 DUREE_DEFI = 300
 NOM_SERVICE = "Serveur IA de Benjamin"
@@ -76,7 +88,7 @@ class Passkeys:
 
     # --- installation d'une passkey ----------------------------------------
     async def page_installer(self, request: Request) -> Response:
-        return HTMLResponse(page_installation(len(passkeys_enregistrees())))
+        return reponse_html(page_installation(len(passkeys_enregistrees())))
 
     async def installer_options(self, request: Request) -> Response:
         try:
@@ -133,8 +145,10 @@ class Passkeys:
     async def page_connexion(self, request: Request) -> Response:
         demande = self.fournisseur.lire_demande(request.query_params.get("r", ""))
         if demande is None:
-            return HTMLResponse(page_message("Lien expiré", "Relance la connexion depuis ton IA."), status_code=400)
-        return HTMLResponse(page_autorisation(demande["nom"], bool(passkeys_enregistrees())))
+            return reponse_html(page_message("Lien expiré", "Relance la connexion depuis ton IA."), 400)
+        return reponse_html(
+            page_autorisation(demande["nom"], hote_redirection(demande["ru"]), bool(passkeys_enregistrees()))
+        )
 
     async def connexion_options(self, request: Request) -> Response:
         cles = passkeys_enregistrees()
@@ -171,9 +185,10 @@ class Passkeys:
                 credential_current_sign_count=0,
                 require_user_verification=True,
             )
+            redirection = self.fournisseur.accorder(demande)
         except Exception:
             return refus
-        return JSONResponse({"redirection": self.fournisseur.accorder(demande)})
+        return JSONResponse({"redirection": redirection})
 
     def enregistrer(self, mcp) -> None:
         routes = [
@@ -245,14 +260,17 @@ def page_message(titre: str, texte: str) -> str:
     return _page(titre, f"<h1>{html.escape(titre)}</h1><p>{html.escape(texte)}</p>")
 
 
-def page_autorisation(nom_client: str, a_des_passkeys: bool) -> str:
+def page_autorisation(nom_client: str, hote_retour: str, a_des_passkeys: bool) -> str:
     nom = html.escape(nom_client)
+    hote = html.escape(hote_retour)
     if not a_des_passkeys:
         return page_message(
             "Aucune passkey", "Enregistre d'abord une passkey sur /passkey/installer, puis relance la connexion."
         )
     corps = f"""<h1>Autoriser {nom}</h1>
 <p><strong>{nom}</strong> demande l'accès à tes tâches et à ton espace de fichiers.</p>
+<p>L'accès sera envoyé à <strong>{hote}</strong>. Si tu n'as pas lancé cette connexion toi-même,
+ou si ce site ne correspond pas à ton IA (claude.ai, France Student…), ferme cette page.</p>
 <button id="ok">Se connecter avec Touch ID / Face ID</button><div id="statut"></div>"""
     script = """
 document.getElementById('ok').onclick = async (e) => {
@@ -262,8 +280,10 @@ document.getElementById('ok').onclick = async (e) => {
     const {options, etat} = await post('/passkey/connexion/options', {});
     const cred = await navigator.credentials.get({publicKey: optionsConnexion(options)});
     const {redirection} = await post('/passkey/connexion/verifier', {credential: enJSON(cred), etat, r});
+    const cible = new URL(redirection);
+    if (!['https:', 'http:'].includes(cible.protocol)) throw new Error('Adresse de retour refusée.');
     statut('Accès accordé, retour à l\\'application…');
-    location.href = redirection;
+    location.href = cible.href;
   } catch (err) { statut(err.message || 'Connexion annulée.', true); e.target.disabled = false; }
 };"""
     return _page(f"Autoriser {nom_client}", corps, script)

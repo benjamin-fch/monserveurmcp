@@ -126,6 +126,16 @@ with TestClient(server.creer_app(), base_url=URL) as c:
     demande = parse_qs(urlparse(r.headers["location"]).query)["r"][0]
     page = c.get(r.headers["location"])
     verifier(page.status_code == 200 and "France Student IA" in page.text, "page d'autorisation affichée")
+    verifier("client.example" in page.text, "hôte de retour affiché sur la page")
+    verifier(page.headers.get("x-frame-options") == "DENY"
+             and "frame-ancestors 'none'" in page.headers.get("content-security-policy", ""),
+             "page non intégrable dans un cadre")
+
+    # 3b. Adresses de retour dangereuses refusées à l'enregistrement
+    for mauvaise in ["javascript:alert(1)", "data:text/html,x", "http://pirate.example/cb"]:
+        r = c.post("/register", json={"client_name": "X", "redirect_uris": [mauvaise],
+                                      "token_endpoint_auth_method": "none"})
+        verifier(r.status_code == 400, f"redirect_uri refusée : {mauvaise}")
 
     # 4. Passkey : mauvaise origine refusée, bonne origine acceptée
     o = c.post("/passkey/connexion/options").json()

@@ -21,13 +21,14 @@ import secrets
 import threading
 import time
 import zlib
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
     AuthorizationParams,
     RefreshToken,
+    RegistrationError,
     TokenError,
     construct_redirect_uri,
 )
@@ -102,6 +103,24 @@ class UsageUnique:
             return jti in self._vus
 
 
+HOTES_LOCAUX = {"localhost", "127.0.0.1", "::1"}
+
+
+def redirection_sure(uri: str) -> bool:
+    """https partout, http seulement en local. Interdit javascript:, data:, etc."""
+    try:
+        u = urlparse(uri)
+    except ValueError:
+        return False
+    if u.scheme == "https":
+        return bool(u.hostname)
+    return u.scheme == "http" and u.hostname in HOTES_LOCAUX
+
+
+def hote_redirection(uri: str) -> str:
+    return urlparse(uri).hostname or "?"
+
+
 def cle_serveur(etiquette: str) -> bytes:
     """Clé dérivée des secrets du serveur et de la liste des passkeys."""
     materiel = "|".join(
@@ -131,6 +150,12 @@ class FournisseurOAuth:
         return self.signataire.derive("client-secret|" + client_id)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        for uri in client_info.redirect_uris or []:
+            if not redirection_sure(str(uri)):
+                raise RegistrationError(
+                    "invalid_redirect_uri",
+                    "redirect_uri doit être en https (http accepté seulement pour localhost)",
+                )
         meta = client_info.model_dump(
             mode="json",
             exclude={"client_id", "client_secret", "client_secret_expires_at"},
@@ -182,6 +207,8 @@ class FournisseurOAuth:
 
     def accorder(self, demande: dict) -> str:
         """Appelé après une passkey valide : renvoie l'URL de retour avec le code."""
+        if not redirection_sure(demande["ru"]):
+            raise ValueError("redirect_uri refusée")
         code = self.signataire.signer(
             "code",
             {
