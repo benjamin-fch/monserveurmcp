@@ -5,16 +5,40 @@ from datetime import datetime, timezone
 
 import uvicorn
 from mcp.server import MCPServer
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 import workspace
-from auth import Authentificateur, MiddlewareAuth
+from auth import Authentificateur
+from oauth import FournisseurOAuth
+from passkey import Passkeys
 
+
+def url_publique() -> str:
+    """URL publique du service (Render fournit RENDER_EXTERNAL_URL)."""
+    url = os.environ.get("PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL")
+    if not url:
+        url = f"http://localhost:{os.environ.get('PORT', '8000')}"
+    return url.rstrip("/")
+
+
+# Double authentification (jeton + TOTP) : sert à enregistrer une passkey et
+# aux scripts locaux (login.py, pull_workspace.py). Refuse de démarrer sans secrets.
+auth = Authentificateur()
+fournisseur = FournisseurOAuth(url_publique(), verifier_session_2fa=auth.session_valide)
 
 mcp = MCPServer(
     "Serveur de tâches IA",
+    auth_server_provider=fournisseur,
+    auth=AuthSettings(
+        issuer_url=url_publique(),
+        resource_server_url=f"{url_publique()}/mcp",
+        validate_token_resource=False,  # vérifié par FournisseurOAuth.load_access_token
+        client_registration_options=ClientRegistrationOptions(enabled=True),
+        revocation_options=RevocationOptions(enabled=False),
+    ),
     instructions=(
         "Serveur permettant à plusieurs intelligences artificielles "
         "de créer, consulter, prendre et terminer des tâches, et de "
@@ -312,8 +336,10 @@ def chercher_dans_fichiers(texte: str, chemin: str = "") -> dict:
 
 
 # --- Routes HTTP : santé, connexion 2FA, synchronisation VS Code --------
+# Ces routes ne passent pas par l'authentification OAuth du SDK : chacune
+# vérifie elle-même ce dont elle a besoin.
 
-auth: Authentificateur | None = None
+Passkeys(fournisseur, auth).enregistrer(mcp)
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -341,6 +367,10 @@ async def connexion(request: Request) -> Response:
 
 @mcp.custom_route("/workspace.zip", methods=["GET"])
 async def archive(request: Request) -> Response:
+    entete = request.headers.get("authorization", "")
+    jeton = entete[7:].strip() if entete.lower().startswith("bearer ") else ""
+    if not jeton or await fournisseur.load_access_token(jeton) is None:
+        return JSONResponse({"erreur": "Non autorisé."}, status_code=401)
     try:
         contenu = workspace.archive_zip()
     except workspace.WorkspaceError as erreur:
@@ -353,9 +383,7 @@ async def archive(request: Request) -> Response:
 
 
 def creer_app():
-    """Construit l'application ASGI protégée par la double authentification."""
-    global auth
-    auth = Authentificateur()  # refuse de démarrer si les secrets manquent
+    """Construit l'application ASGI (OAuth + passkey, transports HTTP et SSE)."""
     workspace.racine()
     workspace.publier_guides()
 
@@ -369,7 +397,14 @@ def creer_app():
         transport_security=security,
         host="0.0.0.0",
     )
-    return MiddlewareAuth(app, auth)
+    # Ancien transport SSE (/sse + /messages/) pour les clients qui ne
+    # connaissent pas encore le HTTP « streamable ». Même authentification.
+    sse = mcp.sse_app(transport_security=security, host="0.0.0.0")
+    deja = {getattr(r, "path", None) for r in app.router.routes}
+    for route in sse.router.routes:
+        if getattr(route, "path", None) not in deja:
+            app.router.routes.append(route)
+    return app
 
 
 if __name__ == "__main__":

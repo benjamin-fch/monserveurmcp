@@ -1,2 +1,3 @@
 mcp[cli]
 pyotp>=2.9
+webauthn>=2.5

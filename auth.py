@@ -5,8 +5,11 @@ Principe :
      Le serveur vérifie le jeton secret ET le code à 6 chiffres de l'application
      d'authentification (Google Authenticator, Authy, 1Password...).
   2. Il renvoie un jeton de session signé, à durée limitée.
-  3. Toutes les autres routes (/mcp, /workspace.zip) exigent
-     ``Authorization: Bearer <jeton de session>``.
+  3. Ce jeton est accepté sur /mcp et /workspace.zip (scripts locaux).
+
+Depuis l'arrivée des passkeys, cette double authentification ne sert plus qu'à
+enregistrer une passkey (/passkey/installer) et aux scripts locaux. Les IA se
+connectent par OAuth + passkey (voir oauth.py et passkey.py).
 
 Les secrets restent dans les variables d'environnement (jamais dans le code) :
   MCP_API_TOKEN       facteur 1, 32 caractères minimum
@@ -134,47 +137,3 @@ class Authentificateur:
     @property
     def duree_session(self) -> int:
         return self._duree
-
-
-class MiddlewareAuth:
-    """Middleware ASGI : tout est protégé sauf /health et /auth/login."""
-
-    PUBLIC = {"/health", "/auth/login"}
-
-    def __init__(self, app, auth: Authentificateur) -> None:
-        self.app = app
-        self.auth = auth
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            if scope["type"] == "websocket":
-                await send({"type": "websocket.close", "code": 1008})
-                return
-            await self.app(scope, receive, send)  # lifespan
-            return
-
-        if scope["path"] in self.PUBLIC:
-            await self.app(scope, receive, send)
-            return
-
-        entetes = {k.decode().lower(): v.decode() for k, v in scope["headers"]}
-        valeur = entetes.get("authorization", "")
-        jeton = valeur[7:].strip() if valeur.lower().startswith("bearer ") else ""
-
-        if jeton and self.auth.session_valide(jeton):
-            await self.app(scope, receive, send)
-            return
-
-        corps = b'{"erreur":"Non autorise. Connecte-toi via POST /auth/login."}'
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 401,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", str(len(corps)).encode()),
-                    (b"www-authenticate", b"Bearer"),
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": corps})

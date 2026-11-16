@@ -5,7 +5,7 @@ Serveur MCP (Python) qui permet à plusieurs IA (France Student IA, Claude…) d
 - **lire, écrire, chercher et organiser des fichiers** dans un espace de travail commun ;
 
 et à toi de **retrouver ces fichiers dans VS Code**. Tout est protégé par une
-**double authentification** : jeton secret + code à 6 chiffres.
+**passkey** (Touch ID / Face ID) via OAuth.
 
 ## 1. Mise en place sur Render (une seule fois)
 
@@ -15,54 +15,61 @@ et à toi de **retrouver ces fichiers dans VS Code**. Tout est protégé par une
 2. Sur Render, service > **Environment**, ajoute :
    | Variable | Valeur |
    |---|---|
-   | `MCP_API_TOKEN` | le jeton affiché (facteur 1) |
-   | `MCP_TOTP_SECRET` | la clé TOTP affichée (facteur 2) |
+   | `MCP_API_TOKEN` | le jeton affiché |
+   | `MCP_TOTP_SECRET` | la clé TOTP affichée |
    | `WORKSPACE_DIR` | `/data/workspace` (voir ci-dessous) |
-3. **Disque persistant** : sur l'offre gratuite de Render, le disque est effacé à
+   | `PASSKEYS` | vide au départ (rempli à l'étape 3) |
+   L'URL publique est lue dans `RENDER_EXTERNAL_URL` (fourni par Render) ;
+   `PUBLIC_URL` la remplace si tu utilises un domaine personnalisé.
+3. **Enregistre ta passkey** : ouvre `https://TON-SERVICE.onrender.com/passkey/installer`
+   sur ton Mac, saisis le jeton secret et le code à 6 chiffres, puis Touch ID.
+   La page affiche une valeur : colle-la dans la variable `PASSKEYS` et enregistre
+   (Render redéploie). Une passkey iCloud fonctionne aussi sur iPhone (Face ID).
+   Pour ajouter un appareil, refais l'étape : la valeur contient alors toutes les passkeys.
+4. **Disque persistant** : sur l'offre gratuite de Render, le disque est effacé à
    chaque redémarrage. Ajoute un *Disk* monté sur `/data` (offre payante), sinon
-   les fichiers créés par les IA disparaîtront.
-4. Commande de démarrage : `python server.py` (inchangée).
+   les fichiers créés par les IA disparaîtront. Les passkeys et les connexions,
+   elles, survivent aux redémarrages.
+5. Commande de démarrage : `python server.py` (inchangée).
 
-⚠️ Le serveur **refuse de démarrer** si `MCP_API_TOKEN` ou `MCP_TOTP_SECRET`
-manque : ajoute les variables **avant** de déployer cette version.
+⚠️ Le serveur **refuse de démarrer** si `MCP_API_TOKEN` ou `MCP_TOTP_SECRET` manque.
 
-## 2. Comment fonctionne la double authentification
+## 2. Comment les IA se connectent (OAuth + passkey)
 
-1. Le client envoie `POST /auth/login` avec `{"token": "<jeton>", "code": "<6 chiffres>"}`.
-2. Si les deux sont corrects, le serveur renvoie un **jeton de session** valable
-   12 h (`SESSION_TTL_SECONDS` pour changer).
-3. Toutes les autres routes (`/mcp`, `/workspace.zip`) exigent
-   `Authorization: Bearer <jeton de session>`. Seuls `/health` et `/auth/login` sont publics.
+Le serveur est son propre serveur d'autorisation **OAuth 2.1**, comme l'attend MCP :
 
-Protections : comparaison à temps constant, même message d'erreur pour les deux
-facteurs, code TOTP non rejouable, blocage 10 min après 8 échecs, sessions
-signées (changer un secret les invalide toutes), rien dans les logs.
+1. L'IA découvre l'authentification (`/.well-known/oauth-protected-resource/mcp`),
+   s'enregistre (`/register`), puis ouvre une fenêtre de connexion.
+2. La fenêtre affiche « Autoriser <nom de l'IA> » : un geste **Touch ID / Face ID** suffit.
+3. L'IA reçoit un jeton d'accès (1 h) et un jeton de renouvellement (90 jours),
+   renouvelé automatiquement. Plus de code à recopier.
 
-## 3. Utilisation depuis ton ordinateur
+Sécurité : PKCE obligatoire, codes et défis à usage unique, passkey liée au domaine
+du serveur (inutilisable sur un site pirate), vérification biométrique exigée.
+Clients, codes et jetons sont **signés** (aucun stockage) : un redémarrage ne
+déconnecte personne. **Tout révoquer** : modifier `PASSKEYS` ou l'un des secrets
+(ajouter une passkey déconnecte donc aussi les IA, qui se reconnecteront d'un geste).
 
-Crée un fichier `.env` à côté de `login.py` (ignoré par Git) :
-```
-MCP_URL=https://TON-SERVICE.onrender.com
-MCP_API_TOKEN=le-jeton-secret
-```
+Transports : `/mcp` (HTTP streamable, recommandé) et `/sse` (ancien SSE), même authentification.
+
+## 3. Brancher une IA
+
+| IA | Réglage |
+|---|---|
+| **France Student IA** | Réglages > MCP : nom `serveur-ia`, URL `https://TON-SERVICE.onrender.com/mcp`, authentification « Connexion avec votre compte » |
+| **Claude Code** | `claude mcp add --transport http --scope user serveur-ia https://TON-SERVICE.onrender.com/mcp` puis `/mcp` > serveur-ia > Authenticate |
+| **claude.ai** | Réglages > Connecteurs > Ajouter un connecteur personnalisé, avec l'URL `/mcp` |
+| **VS Code** | `.vscode/mcp.json` (URL seule) : VS Code ouvre la fenêtre de connexion |
+
+**Scripts locaux** (inchangés, avec la double authentification) : crée un `.env` à
+côté de `login.py` (ignoré par Git) avec `MCP_URL` et `MCP_API_TOKEN`, puis :
 
 | Besoin | Commande |
 |---|---|
-| Obtenir un jeton de session | `python login.py` (demande le code à 6 chiffres) |
+| Obtenir un jeton de session (12 h) | `python login.py` |
 | Télécharger les fichiers des IA | `python pull_workspace.py` puis `code workspace-local` |
 | Tester le serveur | `python test_client.py` |
-
-**VS Code (agent / Copilot)** : remplace l'URL dans `.vscode/mcp.json`, lance
-« MCP: List Servers » > `serveur-ia` > Start ; VS Code te demande le jeton de
-session (celui de `python login.py`). Les outils du serveur sont alors
-utilisables dans le chat de VS Code.
-
-**Claude Code** :
-```
-claude mcp add --transport http serveur-ia https://TON-SERVICE.onrender.com/mcp \
-  --header "Authorization: Bearer $(python login.py)"
-```
-À refaire quand la session expire (12 h).
+| Tester OAuth + passkey en local | `python test_oauth_passkey.py` |
 
 ## 4. Outils exposés
 
@@ -93,6 +100,5 @@ le jeu Roblox). Roblox n'est qu'un projet parmi d'autres.
 
 ## Limites connues
 
-- Les clients qui ne peuvent pas envoyer d'en-tête `Authorization` ne peuvent pas
-  se connecter (c'est le prix de la sécurité). C'est à vérifier pour France Student IA.
+- Pas de révocation individuelle d'un jeton (voir « Tout révoquer » ci-dessus).
 - `pull_workspace.py` va dans un seul sens (serveur → ordinateur).
