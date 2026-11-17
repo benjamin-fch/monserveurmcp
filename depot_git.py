@@ -43,6 +43,7 @@ class Depot:
         self._arret = False
         self.actif = False
         self.dossier: Path | None = None
+        self.dossier_git: Path | None = None
         self.derniere_erreur: str | None = None
 
         repo = os.environ.get("GITHUB_REPO", "").strip()
@@ -57,6 +58,10 @@ class Depot:
         env = {
             **os.environ,
             "GIT_TERMINAL_PROMPT": "0",
+            # Le dépôt git vit HORS de l'espace de travail : les outils fichiers
+            # des IA ne peuvent jamais atteindre sa configuration.
+            "GIT_DIR": str(self.dossier_git),
+            "GIT_WORK_TREE": str(self.dossier),
             "GIT_AUTHOR_NAME": AUTEUR[0],
             "GIT_AUTHOR_EMAIL": AUTEUR[1],
             "GIT_COMMITTER_NAME": AUTEUR[0],
@@ -92,9 +97,12 @@ class Depot:
         if not self._url:
             journal.info("GITHUB_REPO absent : espace de travail local uniquement.")
             return
+        import workspace
+
         self.dossier = dossier
+        self.dossier_git = workspace.dossier_git()
         with self.verrou:
-            if (dossier / ".git").is_dir():
+            if (self.dossier_git / "HEAD").is_file():
                 self._git("remote", "set-url", "origin", self._url)
             else:
                 self._git("init", "-q", "-b", self._branche)

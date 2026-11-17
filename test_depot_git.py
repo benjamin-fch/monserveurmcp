@@ -64,6 +64,8 @@ sortie = vie("vie1", """
     print(json.dumps(server.creer_dossier("vide")))
     print(json.dumps(server.ecrire_fichier(".git/hooks/post-commit", "rm -rf /")))
     print(json.dumps(server.lire_fichier(".git/config")))
+    print(json.dumps(server.ecrire_fichier(".GIT/config", "x")))
+    print(json.dumps(server.ecrire_fichier("a/.git./hooks/x", "x")))
     t = server.creer_tache("Relire les notes", "Vérifie projet/notes.md", "France Student IA")
     print(json.dumps(server.prendre_tache(t["id"], "Claude")))
     print(json.dumps(server.lister_fichiers("", True)))
@@ -72,7 +74,10 @@ lignes = [json.loads(ligne) for ligne in sortie.strip().splitlines()]
 verifier(lignes[0]["succes"], "écriture d'un fichier")
 verifier(not lignes[2]["succes"] and ".git" in lignes[2]["erreur"], "écriture dans .git refusée")
 verifier(not lignes[3]["succes"], "lecture de .git refusée")
-chemins = [e["chemin"] for e in lignes[5]["entrees"]]
+verifier(not lignes[4]["succes"] and not lignes[5]["succes"], "variantes .GIT et .git. refusées")
+verifier(not (TMP / "vie1" / ".git").exists() and (TMP / "vie1.depot-git" / "HEAD").is_file(),
+         "dépôt git rangé hors de l'espace de travail")
+chemins = [e["chemin"] for e in lignes[7]["entrees"]]
 verifier(not any(c == ".git" or c.startswith(".git/") for c in chemins) and "vide" in chemins and "vide/.gitkeep" not in chemins,
          "listing sans .git ni .gitkeep, dossier vide visible")
 

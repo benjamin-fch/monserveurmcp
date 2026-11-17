@@ -31,6 +31,17 @@ def racine() -> Path:
     return chemin
 
 
+def dossier_git() -> Path:
+    """Dépôt git de sauvegarde, à côté (et en dehors) de l'espace de travail."""
+    return racine().parent / f"{racine().name}.depot-git"
+
+
+def _nom_reserve(partie: str) -> bool:
+    """« .git » sous toutes ses formes (.GIT, .git., GIT~1 sur Windows...)."""
+    nom = partie.lower().rstrip(". ")
+    return nom == ".git" or nom.startswith("git~")
+
+
 def quota_octets() -> int:
     return int(os.environ.get("WORKSPACE_MAX_BYTES", "200000000"))
 
@@ -42,7 +53,7 @@ def chemin_sur(relatif: str) -> Path:
     cible = (base / propre).resolve()
     if cible != base and base not in cible.parents:
         raise WorkspaceError("Chemin refusé : il sort de l'espace de travail.")
-    if cible != base and ".git" in cible.relative_to(base).parts:
+    if cible != base and any(_nom_reserve(x) for x in cible.relative_to(base).parts):
         raise WorkspaceError("Chemin refusé : le dossier .git est réservé.")
     return cible
 
@@ -53,7 +64,7 @@ def _interne(chemin: Path) -> bool:
         parties = chemin.relative_to(racine()).parts
     except ValueError:
         return True
-    return ".git" in parties or chemin.name.startswith(".tmp-") or chemin.name == ".gitkeep"
+    return any(_nom_reserve(x) for x in parties) or chemin.name.startswith(".tmp-") or chemin.name == ".gitkeep"
 
 
 def _relatif(chemin: Path) -> str:
@@ -62,9 +73,17 @@ def _relatif(chemin: Path) -> str:
 
 
 def _taille_totale() -> int:
+    """Fichiers de l'espace de travail + historique git (qui grossit à chaque commit)."""
     total = 0
-    for dossier, sous_dossiers, fichiers in os.walk(racine()):
-        sous_dossiers[:] = [d for d in sous_dossiers if d != ".git"]
+    for base in (racine(), dossier_git()):
+        if base.is_dir():
+            total += _taille_dossier(base)
+    return total
+
+
+def _taille_dossier(base: Path) -> int:
+    total = 0
+    for dossier, sous_dossiers, fichiers in os.walk(base):
         for nom in fichiers:
             p = Path(dossier) / nom
             if not p.is_symlink():
@@ -291,7 +310,7 @@ def archive_zip() -> bytes:
     total = 0
     with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as z:
         for dossier, sous_dossiers, fichiers in os.walk(racine()):
-            sous_dossiers[:] = [d for d in sous_dossiers if d != ".git"]
+            sous_dossiers[:] = [d for d in sous_dossiers if not _nom_reserve(d)]
             for nom in sorted(fichiers):
                 p = Path(dossier) / nom
                 if p.is_symlink() or nom.startswith(".tmp-"):
