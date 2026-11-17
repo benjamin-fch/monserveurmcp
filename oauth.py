@@ -16,6 +16,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import threading
@@ -33,6 +34,8 @@ from mcp.server.auth.provider import (
     construct_redirect_uri,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+
+journal = logging.getLogger("oauth")
 
 DUREE_ACCES = int(os.environ.get("OAUTH_ACCESS_TTL_SECONDS", str(3600)))
 DUREE_RENOUVELLEMENT = int(os.environ.get("OAUTH_REFRESH_TTL_SECONDS", str(90 * 86400)))
@@ -77,6 +80,22 @@ class Signataire:
         if "exp" in donnees and int(donnees["exp"]) <= time.time():
             return None
         return donnees
+
+    def raison_refus(self, typ: str, jeton: str) -> str:
+        """Explique pourquoi un jeton est refusé (pour les logs, sans le jeton)."""
+        try:
+            corps, sig = jeton.split(".", 1)
+            attendu = hmac.new(self._cle, corps.encode(), hashlib.sha256).digest()[:24]
+            if not hmac.compare_digest(attendu, _deb64(sig)):
+                return "signature invalide (jeton d'une autre clé : PASSKEYS ou secret modifié depuis ?)"
+            donnees = json.loads(zlib.decompress(_deb64(corps)))
+        except Exception:
+            return "format inconnu"
+        if donnees.get("typ") != typ:
+            return f"type {donnees.get('typ')!r} au lieu de {typ!r}"
+        if "exp" in donnees and int(donnees["exp"]) <= time.time():
+            return f"expiré depuis {int(time.time() - int(donnees['exp']))} s"
+        return "valide"
 
     def derive(self, etiquette: str) -> str:
         return hmac.new(self._cle, etiquette.encode(), hashlib.sha256).hexdigest()
@@ -248,6 +267,7 @@ class FournisseurOAuth:
         d = self.signataire.verifier("code", authorization_code.code)
         if d is None or not self.codes_utilises.consommer(d["jti"], d["exp"]):
             raise TokenError("invalid_grant", "code déjà utilisé ou expiré")
+        journal.info("Accès accordé à %s (ressource %s)", self._nom_client(client.client_id), authorization_code.resource)
         return self._emettre(client.client_id, authorization_code.scopes, authorization_code.resource)
 
     # --- jetons -----------------------------------------------------------
@@ -266,7 +286,10 @@ class FournisseurOAuth:
     async def load_refresh_token(self, client: OAuthClientInformationFull, refresh_token: str) -> RefreshToken | None:
         d = self.signataire.verifier("ref", refresh_token)
         if d is None or d["cid"] != client.client_id:
+            journal.warning("Renouvellement refusé : %s", self.signataire.raison_refus("ref", refresh_token)
+                            if d is None else "client différent")
             return None
+        journal.info("Renouvellement du jeton de %s", self._nom_client(d["cid"]))
         return RefreshToken(
             token=refresh_token,
             client_id=d["cid"],
@@ -285,7 +308,8 @@ class FournisseurOAuth:
         d = self.signataire.verifier("acc", token)
         if d is not None:
             # Jeton émis pour une autre ressource : refusé.
-            if d["res"] and d["res"].rstrip("/") != self.ressource:
+            if d["res"] and d["res"].rstrip("/") not in (self.ressource, self.url_publique):
+                journal.warning("Jeton refusé : ressource %r au lieu de %r", d["res"], self.ressource)
                 return None
             return AccessToken(
                 token=token,
@@ -297,7 +321,12 @@ class FournisseurOAuth:
             )
         if self._session_2fa and self._session_2fa(token):
             return AccessToken(token=token, client_id="session-2fa", scopes=[], subject="proprietaire")
+        journal.warning("Jeton d'accès refusé : %s", self.signataire.raison_refus("acc", token))
         return None
+
+    def _nom_client(self, client_id: str) -> str:
+        d = self.signataire.verifier("cli", client_id)
+        return (d or {}).get("m", {}).get("client_name") or "client inconnu"
 
     async def revoke_token(self, token) -> None:
         # Sans état : pas de révocation individuelle (changer PASSKEYS ou un

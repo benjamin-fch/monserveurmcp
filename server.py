@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import threading
 import uuid
@@ -436,7 +437,21 @@ def creer_app():
     for route in sse.router.routes:
         if getattr(route, "path", None) not in deja:
             app.router.routes.append(route)
-    return app
+    return JournalAuth(app)
+
+
+class JournalAuth:
+    """Note dans les logs si une requête /mcp arrive sans jeton (diagnostic)."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"] in ("/mcp", "/sse"):
+            entetes = dict(scope["headers"])
+            if b"authorization" not in entetes:
+                logging.getLogger("oauth").info("%s %s sans en-tête Authorization", scope["method"], scope["path"])
+        await self.app(scope, receive, send)
 
 
 if __name__ == "__main__":
