@@ -70,6 +70,7 @@ Guides : `lire_guide` (à appeler en premier par l'IA, voir ci-dessous).
 Tâches : `creer_tache`, `lister_taches`, `consulter_tache`, `prendre_tache`, `deposer_resultat`.
 Fichiers : `lister_fichiers`, `lire_fichier`, `ecrire_fichier`, `ajouter_au_fichier`,
 `creer_dossier`, `deplacer_fichier`, `supprimer_fichier`, `chercher_dans_fichiers`.
+Sécurité : `analyser_lien` (bac à sable pour liens suspects, voir section 6).
 
 Les chemins sont relatifs à `WORKSPACE_DIR` ; `..`, chemins absolus et liens
 symboliques sortants sont refusés. Limites : 2 Mo par écriture, 5 Mo par lecture,
@@ -91,8 +92,43 @@ le jeu Roblox). Roblox n'est qu'un projet parmi d'autres.
   dans le dépôt et redéploie. Il apparaît tout seul dans `lire_guide()`.
 - Dans une conversation normale (sans connexion MCP), colle-lui simplement le contenu de `00-demarrage.md`.
 
+## 6. Bac à sable : vérifier un lien suspect (`analyser_lien`)
+
+Une IA connectée (Claude, France Student IA, VS Code) peut vérifier un lien **sans que
+tu l'ouvres** : c'est le serveur Render qui va voir le site, en lecture seule.
+
+- **Isolé de ton téléphone** : rien n'est ouvert chez toi.
+- **Passif** : la page est lue comme du texte, son JavaScript n'est jamais exécuté,
+  rien n'est téléchargé ni installé, aucun cookie.
+- **Le serveur est protégé** : adresses internes refusées à chaque redirection
+  (anti-SSRF), ports 80/443/8080/8443 seulement, 1,5 Mo et 20 s max par page.
+- **Ce qui est vérifié** : imitation de marques (Ameli, impots, La Poste, banques,
+  PayPal…), fautes de frappe volontaires (`paypa1`), lettres cyrilliques sosies,
+  faux « gouv », âge du domaine (créé il y a 3 jours ?), extension douteuse,
+  certificat, redirections cachées, liens raccourcis, champs carte bancaire / code SMS,
+  formulaire envoyé vers un autre site, robot Telegram de kit de phishing, ton
+  pressant, téléchargement d'APK ou de profil iPhone.
+- Résultat : 🔴 DANGEREUX / 🟠 SUSPECT / 🟢 AUCUN SIGNAL D'ALERTE + raisons + conseil.
+
+**Options (gratuites, recommandées)** — ajoute dans Render > Environment :
+
+| Variable | Apporte | Où l'obtenir |
+|---|---|---|
+| `URLSCAN_API_KEY` | un **vrai navigateur isolé** ouvre le site + **capture d'écran** | compte gratuit sur urlscan.io > Settings & API |
+| `GOOGLE_SAFE_BROWSING_KEY` | listes noires de Google | Google Cloud Console > activer « Safe Browsing API » > clé d'API |
+| `VIRUSTOTAL_API_KEY` | avis de ~90 antivirus | compte gratuit sur virustotal.com > API key |
+| `URLSCAN_VISIBILITE` | `unlisted` (défaut) ou `private`/`public` | — |
+
+Sans clé, l'analyse locale fonctionne quand même.
+
+Le code est rangé dans le sous-projet `verificateur_liens/` (voir son `LISEZ-MOI.md`).
+En ligne de commande : `python -m verificateur_liens.analyse_lien "https://lien-suspect"`.
+Tests (sans Internet, avec un faux site de phishing local) : `python -m unittest verificateur_liens.test_analyse_lien`.
+
 ## Limites connues
 
 - Les clients qui ne peuvent pas envoyer d'en-tête `Authorization` ne peuvent pas
   se connecter (c'est le prix de la sécurité). C'est à vérifier pour France Student IA.
 - `pull_workspace.py` va dans un seul sens (serveur → ordinateur).
+- `analyser_lien` repère les arnaques courantes mais ne garantit rien : certains sites
+  piégés montrent une page innocente aux robots. 🟢 ne veut pas dire « garanti sûr ».
