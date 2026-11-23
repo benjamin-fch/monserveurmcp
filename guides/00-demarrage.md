@@ -45,6 +45,8 @@ son propre guide.
 - `01-outils.md` : mode d'emploi de chaque outil, avec exemples.
 - `02-projets.md` : **comment mener n'importe quel projet** et passer le relais à Claude.
 - `03-conventions.md` : comment nommer, structurer et documenter les fichiers.
+- `04-verifier-un-lien.md` : **vérifier un lien suspect** avec `analyser_lien` sans
+  que Benj ait à l'ouvrir. Lis-le dès que Benj te montre un lien dont il doute.
 - `projet-<nom>.md` : guide propre à un projet précis (ex. `projet-echo-express`,
   un jeu Roblox). Appelle `lire_guide()` sans nom pour voir la liste à jour, et lis
   le guide du projet sur lequel tu travailles.

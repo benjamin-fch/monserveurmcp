@@ -47,6 +47,12 @@ Règles :
 - Les tâches sont **en mémoire** : elles disparaissent si le serveur redémarre.
   Ce qui compte doit aussi figurer dans `LISEZ-MOI.md`.
 
+## Sécurité
+
+| Outil | Usage |
+|---|---|
+| `analyser_lien(url, scan_navigateur=true, appareil="mobile")` | Vérifier un lien suspect sans l'ouvrir. Mode d'emploi : `04-verifier-un-lien`. |
+
 ## Exemple de passage de relais
 
 1. Tu écris ton travail dans `mon-projet/...` et tu mets à jour `mon-projet/LISEZ-MOI.md`.
